@@ -3,6 +3,7 @@ use url::Url;
 use crate::config::{Config};
 use futures_util::StreamExt;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+use crate::handle_payload::{handle_payload};
 
 pub async fn run_feed() -> Result<(), String> {
 
@@ -22,7 +23,7 @@ let config = Config::get_config()?;
                 while let Some(msg) = read_pipe.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            println!("{}", text)
+                            handle_payload(&text)?;
                         },
                         Ok(Message::Close(_)) | Err(_) => {
                             break;
