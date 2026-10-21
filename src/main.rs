@@ -1,6 +1,7 @@
 mod config;
 mod connection_loop;
 mod handle_payload;
+mod url_builder;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Initializing crypto-tick engine...");

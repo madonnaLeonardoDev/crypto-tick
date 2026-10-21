@@ -1,13 +1,21 @@
 use std::{env, fs};
 use std::path::{Path, PathBuf};
-
 use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct SymbolWs{
+    pub symbol: String,
+    pub endpoints: Vec<String>
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub websocket: String,
+    pub watchlist: Vec<SymbolWs>,
     pub execution_endpoint: String,
-    pub timeout: u64
+    pub timeout: u64,
+    pub logging: bool,
+    pub logs_path: String
 }
 
 impl Config {
@@ -25,17 +33,30 @@ impl Config {
         config_dir.push("crypto-tick.conf");
 
         if !Path::new(&config_dir).exists() {
-            let default_config = r#"
-#crypto-tick config file
+            let default_config = 
+r#"#crypto-tick config file
             
 #API endpoint for market data websocket
 websocket = ""
+
+#Watchlist
+#WARNING: The source code is written to parse Binance's aggTrade, bookTicker, depth<depthLevels>@<Frequency>, forceOrder
+#If using different API you might wanna update the parsing source code (handle_payload.rs)
+
+[[watchlist]]
+symbol = ""
+endpoints = [""]
 
 #API endpoint for execution 
 execution_endpoint = ""
 
 #Retry timeout after connection dropped (in seconds)
 timeout = 3
+
+logging = false
+
+#logs_path if left empty defaults to your home directory
+logs_path = ""
             "#;
 
             fs::write(&config_dir, &default_config)
@@ -56,11 +77,16 @@ timeout = 3
         let config_str = fs::read_to_string(config_dir)
             .map_err(|e| e.to_string())?;
 
-        let parsed_config: Config = toml::from_str(&config_str)
+        let mut parsed_config: Config = toml::from_str(&config_str)
             .map_err(|e| e.to_string())?;
 
-        if parsed_config.execution_endpoint.is_empty() || parsed_config.websocket.is_empty() {
+        if parsed_config.execution_endpoint.is_empty() || parsed_config.websocket.is_empty() || parsed_config.watchlist.is_empty() {
             return Err("Missing fields in the config file".to_string())
+        }
+
+        if parsed_config.logs_path.is_empty() {
+            parsed_config.logs_path = env::var("HOME")
+                .map_err(|_| "Missing Home enviroment variable".to_string())?;
         }
 
         Ok(parsed_config)

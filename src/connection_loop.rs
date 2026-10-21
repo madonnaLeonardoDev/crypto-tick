@@ -1,19 +1,17 @@
 use tokio::time::{sleep, Duration};
-use url::Url;
+
 use crate::config::{Config};
 use futures_util::StreamExt;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use crate::handle_payload::{handle_payload};
+use crate::url_builder::build_url;
 
 pub async fn run_feed() -> Result<(), String> {
 
 let config = Config::get_config()?;
 
     loop {
-        let websocket_str = &config.websocket;
-
-        let ws_url = Url::parse(&websocket_str)
-        .map_err(|e| format!("Invalid WebSocket URL format in config:\n{}", e))?;
+        let ws_url = build_url(&config)?;
 
         match connect_async(ws_url.as_str()).await {
             Ok((ws_stream, _)) => {
