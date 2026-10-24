@@ -40,7 +40,7 @@ r#"#crypto-tick config file
 websocket = ""
 
 #Watchlist
-#WARNING: The source code is written to parse Binance's aggTrade, bookTicker, depth<depthLevels>@<Frequency>, forceOrder
+#WARNING: The source code is written to parse Binance's aggTrade, bookTicker, depth<depthLevels>@<Frequency>
 #If using different API you might wanna update the parsing source code (handle_payload.rs)
 
 [[watchlist]]

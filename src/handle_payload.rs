@@ -1,5 +1,5 @@
 use std::{str::FromStr};
-
+use std::time::{SystemTime, UNIX_EPOCH};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::{self, Value};
@@ -33,19 +33,19 @@ struct RawAggTradeEvent{
 impl From<RawAggTradeEvent> for AggTrade {
     fn from(value: RawAggTradeEvent) -> Self {
         Self {
-            symbol: (value.s),
-            trade_time: (value.T),
-            price: (value.p.parse().unwrap()),
-            quantity: (value.q.parse().unwrap()),
-            is_buy: (!value.m) 
+            symbol: value.s.to_ascii_lowercase(),
+            trade_time: value.T,
+            price: value.p.parse().unwrap(),
+            quantity: value.q.parse().unwrap(),
+            is_buy: !value.m 
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BookTicker{
     pub symbol: String,
-    pub transaction_time: u64,
+    pub local_time: u64,
     pub bid_price: Decimal,
     pub bid_quantity: Decimal,
     pub ask_price: Decimal,
@@ -56,7 +56,6 @@ pub struct BookTicker{
 pub struct RawBookTickerEvent {
     s: String,
     #[allow(non_snake_case)]
-    T:u64,
     b: String,
     #[allow(non_snake_case)]
     B: String,
@@ -67,53 +66,102 @@ pub struct RawBookTickerEvent {
 
 impl From<RawBookTickerEvent> for BookTicker {
     fn from(value: RawBookTickerEvent) -> Self {
+        let local_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
         Self {
-            symbol: (value.s),
-            transaction_time: (value.T),
-            bid_price: (Decimal::from_str(&value.b).unwrap()),
-            bid_quantity: (Decimal::from_str(&value.B).unwrap()),
-            ask_price: (Decimal::from_str(&value.a).unwrap()),
-            ask_quantity: (Decimal::from_str(&value.A).unwrap())
+            symbol: value.s.to_ascii_lowercase(),
+            local_time: local_time as u64,
+            bid_price: Decimal::from_str(&value.b).unwrap(),
+            bid_quantity: Decimal::from_str(&value.B).unwrap(),
+            ask_price: Decimal::from_str(&value.a).unwrap(),
+            ask_quantity: Decimal::from_str(&value.A).unwrap()
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BidAsk{
+    quantity: Decimal,
+    price: Decimal
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DepthLevels {
+    symbol: String,
+    local_time: u64,
+    bids: Vec<BidAsk>,
+    asks: Vec<BidAsk>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawDepthLevelsEvent {
+    bids: Vec<(String, String)>,
+    asks: Vec<(String, String)>
+}
+
+impl RawDepthLevelsEvent {
+    fn into_symbol(self, s: &str) -> DepthLevels {
+        let mut bids: Vec<BidAsk> = Vec::with_capacity(self.bids.len());
+        let mut asks: Vec<BidAsk> = Vec::with_capacity(self.asks.len());
+
+        let local_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        for e in self.bids {
+            bids.push(BidAsk { quantity: Decimal::from_str(&e.1).unwrap() , price: Decimal::from_str(&e.0).unwrap() });
+        }
+        for e in self.asks {
+            asks.push(BidAsk { quantity: Decimal::from_str(&e.1).unwrap() , price: Decimal::from_str(&e.0).unwrap() });
+        }
+        
+        DepthLevels {
+            symbol: s.to_string().to_ascii_lowercase(),
+            local_time: local_time as u64,
+            bids: bids,
+            asks: asks 
+        }
+    }
+}
+
 
 pub fn handle_payload(payload_str: &str) -> Result<(), String> {
 
     let raw_payload: RawPayload = serde_json::from_str(payload_str)
         .map_err(|e| e.to_string())?;
 
-    let (_symbol, stream_type) = raw_payload.stream.split_once("@").unwrap();
+    let (symbol, stream_type) = raw_payload.stream.split_once("@").unwrap();
 
     match stream_type {
         "aggTrade" => {
             let raw_data: RawAggTradeEvent = serde_json::from_value(raw_payload.data)
                 .map_err(|e| e.to_string())?; 
             let data: AggTrade = raw_data.into();
+
+            println!("{:?}", data);
         },
         s if s.starts_with("depth") => {
-
+            println!("{}", raw_payload.data);
+            
+            let raw_data: RawDepthLevelsEvent = serde_json::from_value(raw_payload.data)
+                .map_err(|e| e.to_string())?;
+            let data: DepthLevels = raw_data.into_symbol(symbol);
+            println!("{:?}", data);
         },
-        "forceOrder" => {
-
+        "bookTicker" => {
+            let raw_data: RawBookTickerEvent = serde_json::from_value(raw_payload.data)
+                .map_err(|e| e.to_string())?;
+            let data: BookTicker = raw_data.into();
+            println!("{:?}", data);
         },
         _=> {
+            return Err("Unkown Stream Type value".to_string())
+        },
 
-        }
     };
-
-    /* let raw_payload: RawAggTradeEvent = serde_json::from_str(payload_str)
-        .map_err(|e| e.to_string())?;
-
-    let payload: AggTrade = raw_payload.into();
-    
-    //WHAT TO DO WITH THE PAYLOAD
-
-    println!("{:?}", payload);
-
-    */
-
-    println!("{}", payload_str);
 
     Ok(())
 
